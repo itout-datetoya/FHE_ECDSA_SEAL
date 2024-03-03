@@ -1,4 +1,15 @@
 from seal import *
+import numpy as np
+from seal_uint256 import (
+    u256_to_array,
+    array_to_u256,
+    plain_row_to_enc_col,
+    enc_col_to_plain_row,
+    u256_add,
+    u256_add_plain,
+    u256_multiply,
+    u256_multiply_plain,
+)
 
 from random import randint
 from ecc import S256Point, Signature, PrivateKey
@@ -14,26 +25,32 @@ G = S256Point(
 
 
 parms = EncryptionParameters(scheme_type.bgv)
-poly_modulus_degree = 16384
+poly_modulus_degree = 8192
 parms.set_poly_modulus_degree(poly_modulus_degree)
-parms.set_coeff_modulus(CoeffModulus::BFVDefault(poly_modulus_degree));
-parms.set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 20))
+parms.set_coeff_modulus(CoeffModulus.BFVDefault(poly_modulus_degree))
+parms.set_plain_modulus(PlainModulus.Batching(poly_modulus_degree, 60))
 context = SEALContext(parms)
 
 
 sk_a = PrivateKey(randint(0, N))
+pk_a = sk_a.point
+
 sk_b = PrivateKey(randint(0, N))
-pk = sk_a.point + sk_b.point
+pk_b = sk_b.point
+
+pk = pk_a + pk_b # No need for Alice and Bob to cooperate for compute the public key.
 z = randint(0, 2**256)
 
 
 # Alice
 k_a = sk_a.deterministic_k(z)
+k_a_inv = pow(k_a, N-2, N)
 R_a = k_a * G # send to Bob
 
 
 # Bob
 k_b = sk_b.deterministic_k(z)
+k_b_inv = pow(k_b, N-2, N)
 R_b = k_b * G # send to Alice
 
 
@@ -48,25 +65,30 @@ relin_keys = keygen.create_relin_keys()
 encryptor = Encryptor(context, public_key)
 evaluator = Evaluator(context)
 decryptor = Decryptor(context, secret_key)
+batch_encoder = BatchEncoder(context)
+slot_count = 128
 
-k_a_inv = pow(k_a, N-2, N)
-encrypted_k_a_inv = encryptor.encrypt(k_a_inv) # send to Bob
-encrypted_secret_a = encryptor.encrypt(sk_a.secret) # send to Bob
+k_a_inv_array = u256_to_array(k_a_inv, slot_count)
+encrypted_k_a_inv = plain_row_to_enc_col(encryptor, batch_encoder, k_a_inv_array, slot_count) # send to Bob
+prod_secret_k_inv_array = u256_to_array(sk_a.secret * k_a_inv % N, slot_count)
+encrypted_prod_secret_k_inv = plain_row_to_enc_col(encryptor, batch_encoder, prod_secret_k_inv_array, slot_count) # send to Bob
 
 
 # Bob
-encrypted_rsa = evaluator.multiply_plain(encrypted_secret_a, r) # r * s_a
-encrypted_zrs = evaluator.add_plain(encrypted_rsa, z + r * sk_b.secret) # z + r * s_b + r * s_a == z + r * (s_a + s_b)
-k_b_inv = pow(k_b, N-2, N)
-encrypted_k_inv = evaluator.multiply_plain(encrypted_k_a_inv, k_b_inv)
-encrypted_s = evaluator.multiply(encrypted_zrs, encrypted_k_inv) # send to Alice
+plain_zrek_array = u256_to_array(((z + r * sk_b.secret) * k_b_inv) % N, slot_count)
+encrypted_s_former = u256_multiply_plain(evaluator, batch_encoder, encrypted_k_a_inv, plain_zrek_array)
+plain_rk_array = u256_to_array((r * k_b_inv) % N, slot_count)
+encrypted_s_latter = u256_multiply_plain(evaluator, batch_encoder, encrypted_prod_secret_k_inv, plain_rk_array)
+encrypted_s = u256_add(evaluator, encrypted_s_former, encrypted_s_latter) # send to Alice
 
 
 # Alice
-s = decryptor.decrypt(encrypted_s) % N
+s_row = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_s)
+s = array_to_u256(s_row) % N
 if s > N / 2:
     s = N - s
 sig = Signature(r, s)
+
 
 
 if pk.verify(z, sig):
