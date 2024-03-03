@@ -498,6 +498,7 @@ class PrivateKeyTest(unittest.TestCase):
         z = randint(0, 2**256)
         sig = pk.sign(z)
         self.assertTrue(pk.point.verify(z, sig))
+        
 
     def test_wif(self):
         pk = PrivateKey(2**256 - 2**199)
