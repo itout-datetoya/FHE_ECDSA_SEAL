@@ -45,18 +45,14 @@ z = randint(0, 2**256)
 # Alice
 k_a = sk_a.deterministic_k(z)
 k_a_inv = pow(k_a, N-2, N)
-R_a = k_a * G # send to Bob
 
 
 # Bob
 k_b = sk_b.deterministic_k(z)
 k_b_inv = pow(k_b, N-2, N)
-R_b = k_b * G # send to Alice
 
 
 # Alice
-R = k_a * R_b # == k_b * R_a
-r = R.x.num
 keygen = KeyGenerator(context)
 secret_key = keygen.secret_key()
 public_key = keygen.create_public_key() # send to Bob
@@ -68,6 +64,7 @@ decryptor = Decryptor(context, secret_key)
 batch_encoder = BatchEncoder(context)
 slot_count = 128
 
+R_a = k_a * G # send to Bob
 k_a_inv_array = u256_to_array(k_a_inv, slot_count)
 encrypted_k_a_inv = plain_row_to_enc_col(encryptor, batch_encoder, k_a_inv_array, slot_count) # send to Bob
 prod_secret_k_inv_array = u256_to_array(sk_a.secret * k_a_inv % N, slot_count)
@@ -75,6 +72,8 @@ encrypted_prod_secret_k_inv = plain_row_to_enc_col(encryptor, batch_encoder, pro
 
 
 # Bob
+R = k_b * R_a
+r = R.x.num
 plain_zrek_array = u256_to_array(((z + r * sk_b.secret) * k_b_inv) % N, slot_count)
 encrypted_s_former = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_k_a_inv, plain_zrek_array)
 plain_rk_array = u256_to_array((r * k_b_inv) % N, slot_count)
