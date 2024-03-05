@@ -3,6 +3,8 @@ import numpy as np
 
 from random import randint
 
+N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+
 def u256_to_array(number, array_size, length = 4):
     num_string = format(number, 'x')
     num_string = '0' * (array_size*length-len(num_string)) + num_string
@@ -11,6 +13,7 @@ def u256_to_array(number, array_size, length = 4):
     while i-length >= 0:
         num_array.append(int(num_string[i-length:i], 16))
         i -= length
+    
     return num_array
 
 def array_to_u256(array_u16, base=16, length=4):
@@ -19,19 +22,21 @@ def array_to_u256(array_u16, base=16, length=4):
         num_string = format(array_u16[i], 'x')
         num_string = '0' + num_string
         number += int(num_string, 16) * base**(length*i)
+    
     return int(number)
 
 def plain_row_to_enc_col(encryptor, encoder, plain_row, slot_count):
     encrypted_col = []
     for i in range(slot_count):
-        if plain_row[i] != 0:
-            encrypted_col.append(encryptor.encrypt(encoder.encode([plain_row[i]])))
+        encrypted_col.append(encryptor.encrypt(encoder.encode([plain_row[i]])))
+    
     return encrypted_col
 
 def enc_col_to_plain_row(decryptor, encoder, encrypted_col):
     plain_row = []
     for i in range(len(encrypted_col)):
         plain_row.append(encoder.decode(decryptor.decrypt(encrypted_col[i]))[0])
+    
     return plain_row
 
 
@@ -85,7 +90,8 @@ def u256_multiply(evaluator, encrypted_a_col, encrypted_b_col):
 
     return encrpyted_result
 
-def u256_multiply_plain(evaluator, encoder, encrypted_col, plain_row):
+def u256_multiply_plain(encryptor, evaluator, encoder, encrypted_col, plain_row):
+    encrypted_0 = encryptor.encrypt(encoder.encode([0]))
     encrpyted_result = []
     for i in range(len(plain_row)):
         if plain_row[i] != 0:
@@ -97,7 +103,15 @@ def u256_multiply_plain(evaluator, encoder, encrypted_col, plain_row):
                     encrpyted_result.append(part_prods[j])
                 else:
                     encrpyted_result[i+j] = evaluator.add(encrpyted_result[i+j], part_prods[j])
-
+        else:
+            part_prods = []
+            for j in range(len(encrypted_col)):
+                part_prods.append(encrypted_0)
+                if i == 0 or j == len(encrypted_col)-1:
+                    encrpyted_result.append(part_prods[j])
+                else:
+                    encrpyted_result[i+j] = evaluator.add(encrpyted_result[i+j], part_prods[j])
+            
     return encrpyted_result
 
 
@@ -122,24 +136,34 @@ def test():
     batch_encoder = BatchEncoder(context)
     slot_count = 128
 
-    u256_a = randint(0, 2**256)
-    u256_b = randint(0, 2**256)
+    u256_a = randint(0, N)
+    u256_b = randint(0, N)
 
     array_u16_a = u256_to_array(u256_a, slot_count)
     array_u16_b = u256_to_array(u256_b, slot_count)
 
     encrypted_a = plain_row_to_enc_col(encryptor, batch_encoder, array_u16_a, slot_count)
+    print("Encrypted a")
     encrypted_b = plain_row_to_enc_col(encryptor, batch_encoder, array_u16_b, slot_count)
+    print("Encrypted b")
 
     encrypted_sum_ee = u256_add(evaluator, encrypted_a, encrypted_b)
+    print("Added Enc(a) Enc(b)")
     encrypted_sum_ep = u256_add_plain(encryptor, evaluator, batch_encoder, encrypted_a, array_u16_b)
+    print("Added Enc(a) Plain(b)")
     encrypted_prod_ee = u256_multiply(evaluator, encrypted_a, encrypted_b)
-    encrypted_prod_ep = u256_multiply_plain(evaluator, batch_encoder, encrypted_a, array_u16_b)
+    print("Multiplied Enc(a) Enc(b)")
+    encrypted_prod_ep = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_a, array_u16_b)
+    print("Multiplied Enc(a) Plain(b)")
 
     array_sum_ee = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_sum_ee)
+    print("Decrypted Sum Enc(a) Enc(b)")
     array_sum_ep = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_sum_ep)
+    print("Decrypted Sum Enc(a) Plain(b)")
     array_prod_ee = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_prod_ee)
+    print("Decrypted Prod Enc(a) Enc(b)")
     array_prod_ep = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_prod_ep)
+    print("Decrypted Prod Enc(a) Plain(b)")
 
     sum_ee = array_to_u256(array_sum_ee)
     sum_ep = array_to_u256(array_sum_ep)
@@ -173,5 +197,5 @@ def test():
 
 
 if __name__ == "__main__":
-    for i in range(5):
+    for i in range(1):
         test()

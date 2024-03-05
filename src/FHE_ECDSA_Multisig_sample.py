@@ -76,9 +76,9 @@ encrypted_prod_secret_k_inv = plain_row_to_enc_col(encryptor, batch_encoder, pro
 
 # Bob
 plain_zrek_array = u256_to_array(((z + r * sk_b.secret) * k_b_inv) % N, slot_count)
-encrypted_s_former = u256_multiply_plain(evaluator, batch_encoder, encrypted_k_a_inv, plain_zrek_array)
+encrypted_s_former = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_k_a_inv, plain_zrek_array)
 plain_rk_array = u256_to_array((r * k_b_inv) % N, slot_count)
-encrypted_s_latter = u256_multiply_plain(evaluator, batch_encoder, encrypted_prod_secret_k_inv, plain_rk_array)
+encrypted_s_latter = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_prod_secret_k_inv, plain_rk_array)
 encrypted_s = u256_add(evaluator, encrypted_s_former, encrypted_s_latter) # send to Alice
 
 
