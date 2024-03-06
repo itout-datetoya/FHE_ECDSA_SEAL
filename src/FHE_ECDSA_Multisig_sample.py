@@ -65,25 +65,22 @@ batch_encoder = BatchEncoder(context)
 slot_count = 128
 
 R_a = k_a * G # send to Bob
-k_a_inv_array = u256_to_array(k_a_inv, slot_count)
-encrypted_k_a_inv = plain_row_to_enc_col(encryptor, batch_encoder, k_a_inv_array, slot_count) # send to Bob
-prod_secret_k_inv_array = u256_to_array(sk_a.secret * k_a_inv % N, slot_count)
-encrypted_prod_secret_k_inv = plain_row_to_enc_col(encryptor, batch_encoder, prod_secret_k_inv_array, slot_count) # send to Bob
+secret_a_array = u256_to_array(sk_a.secret, slot_count)
+encrypted_secret_a = plain_row_to_enc_col(encryptor, batch_encoder, secret_a_array, slot_count) # send to Bob
 
 
 # Bob
 R = k_b * R_a
-r = R.x.num
-plain_zrek_array = u256_to_array(((z + r * sk_b.secret) * k_b_inv) % N, slot_count)
-encrypted_s_former = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_k_a_inv, plain_zrek_array)
+r = R.x.num # send to Alice
+plain_s_former_array = u256_to_array(((z + r * sk_b.secret) * k_b_inv) % N, slot_count)
 plain_rk_array = u256_to_array((r * k_b_inv) % N, slot_count)
-encrypted_s_latter = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_prod_secret_k_inv, plain_rk_array)
-encrypted_s = u256_add(evaluator, encrypted_s_former, encrypted_s_latter) # send to Alice
+encrypted_s_latter = u256_multiply_plain(encryptor, evaluator, batch_encoder, encrypted_secret_a, plain_rk_array)
+encrypted_s_prime = u256_add_plain(encryptor, evaluator, batch_encoder, encrypted_s_latter, plain_s_former_array) # send to Alice
 
 
 # Alice
-s_row = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_s)
-s = array_to_u256(s_row) % N
+s_prime_array = enc_col_to_plain_row(decryptor, batch_encoder, encrypted_s_prime)
+s = array_to_u256(s_prime_array) * k_a_inv % N
 if s > N / 2:
     s = N - s
 sig = Signature(r, s)
